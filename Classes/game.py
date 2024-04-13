@@ -13,21 +13,57 @@ class Game:
     def a_star(self):
         return
     
-    def min_max(self):
-        return 
-    
+    def min_max(self, state, depth, alpha, beta, maximize):
+        if depth == 0:
+            return [-1, state.player2_score - state.player1_score]
+        
+        states = []
+        for (i, edge) in enumerate(state.edges):
+            if edge.used == False:  
+                temp_state = State(state)   
+                temp_state.add_edge(i)     
+                states.append([i,temp_state])
+                
+
+        if maximize:
+            max_val = -999
+            
+            for state in states:
+                index, eval = self.min_max(state[1], depth - 1, alpha, beta, False)
+                if eval >= max_val:
+                    max_val = eval
+                    index = state[0]
+                alpha = max(alpha, eval)
+                if beta <= alpha:
+                    break
+            return index, max_val
+        else:
+            min_val = 999
+            for state in states:
+                index, eval = self.min_max(state[1], depth - 1, alpha, beta, True)
+                if eval <= min_val:
+                    min_val = eval
+                    index = state[0]
+                beta = min(beta, eval)
+                if beta <= alpha:
+                    break
+            return index, min_val
+
     def bayes(Self):
         return 
 
     # algorithm handler
 
-    def next_state(self, current_state, states):
+    def next_state(self, current_state):
         if self.algorithm == 0:
-            self.current_state = self.a_star(current_state, states)
+            self.current_state = self.a_star(current_state)
         if self.algorithm == 1:
-            self.current_state = self.min_max(current_state, states)
+            self.current_state = State(self)
+            l = self.min_max(current_state, self.depth + 1, -9999, 9999, True)
+            print(l)
+            return l[0]
         if self.algorithm == 2:
-            self.current_state = self.bayes(current_state, states)
+            self.current_state = self.bayes(current_state)
 
     # draws the white points
             
@@ -83,39 +119,82 @@ class Game:
         self.window.blit(text, textRect)
         self.window.blit(text2, textRect2)
 
-    # TREBUIE DESPICATA CA NU STIU CARE MUTA PRIMUL
-
-    def make_move(self, event):
-
-        self.user_turn = False
+    def user_move(self, event):
+        
         (index_point1, index_point2) = self.determine_points_user(event.pos[0], event.pos[1])
         index_edge_user = self.determine_edge_user(index_point1, index_point2)
-        self.edges[index_edge_user].used = True
         
+        if self.edges[index_edge_user].used:
+            print("Allready used!")
+            self.user_turn = True
+            return
+    
+        self.edges[index_edge_user].used = True
+
         possible_cells = []
         for cell in self.cells:
             if cell.contains(self.edges[index_edge_user]):
                 possible_cells.append(cell)
         
+        again = False
         
         for cell in possible_cells:
             if cell.check_full():
-                self.player1_score += 1
-                cell.draw(self.window, self.colors["blue"], self.cell_size)
+                again = True
+                if self.user_blue:
+                    self.player1_score += 1
+                    cell.draw(self.window, self.colors["blue"], self.cell_size)
+                else:
+                    self.player2_score += 1
+                    cell.draw(self.window, self.colors["red"], self.cell_size)
         
         #time.sleep(1)
         self.end = self.game_over()
         if self.end:
             return
-    
-        #index_edge_ai = self.determine_edge_ai(self, self.state)
-        #self.edges[index_edge_ai].used = True
+        
+        self.user_turn = again
+        
+        self.ai_move()
 
-        #time.sleep(1)
+    def ai_move(self):
+        
+        index_edge_ai = self.next_state(self)
+        self.edges[index_edge_ai].used = True
+
+        possible_cells = []
+        for cell in self.cells:
+            if cell.contains(self.edges[index_edge_ai]):
+                possible_cells.append(cell)
+        
+        again = False
+        
+        for cell in possible_cells:
+            if cell.check_full():
+                again = True
+                if not self.user_blue:
+                    self.player1_score += 1
+                    cell.draw(self.window, self.colors["blue"], self.cell_size)
+                else:
+                    self.player2_score += 1
+                    cell.draw(self.window, self.colors["red"], self.cell_size)
+        
         self.end = self.game_over()
         if self.end:
             return
+        
+        if again:
+            self.ai_move()
+
         self.user_turn = True
+
+    def make_move(self, event):
+
+        if self.user_turn:
+            self.user_move(event)
+        else:
+            self.ai_move()
+        
 
     def event_handler(self):
         for event in pygame.event.get():
@@ -224,11 +303,6 @@ class Game:
                 return i
         return None
     
-    # return the index of the edge based on the chosen algorithm
-
-    def determine_edge_ai(self, state):
-        return self.next_state() 
-    
     # game constructor
 
     def __init__(self):
@@ -239,30 +313,32 @@ class Game:
         self.padding = 40                   # padding for margins of the windows
         self.rows = self.cols = 11          # number of rows and columns
 
-        self.user_turn = True           
-        self.player1_user = True
-        self.player1_first = True
-        
+
+        self.user_blue = True
+        self.user_turn = True  
+
         self.pos = None                     
 
         self.colors = self.create_colors()
         self.points = self.create_points()
         self.edges = self.create_edges()
         self.cells = self.create_cells()
-        self.current_state = State()        # current_state, updated every move
-        self.difficulty = 0                 # 0 -> easy, 1 -> medium, 2 -> hard
-        self.end = False                    # is game finished
-        self.algorithm = 0                  # 0 -> A*, 1 -> MinMax, 2 -> Bayes Networks
-        self.states = []                    # priority_queue ??
         self.player1_score = 0
         self.player2_score = 0
+        self.current_state = State(self)    # current_state, updated every move
+        self.states = []
+        self.difficulty = 0                 # 0 -> easy, 1 -> medium, 2 -> hard
+        self.end = False                    # is game finished
+        self.algorithm = 1                  # 0 -> A*, 1 -> MinMax, 2 -> Bayes Networks
+
+        self.depth = 1
+    
 
         pygame.init()
         self.window = pygame.display.set_mode((self.width, self.height))        # creates the main window
         
         self.draw_points()
-
-        # while gama is running
+        # while game is running
         
         while not self.end:
             
